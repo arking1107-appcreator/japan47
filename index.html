@@ -616,7 +616,7 @@
   <div id="topbar">
     <div style="width:32px;flex-shrink:0;"></div>
     <span class="brand-title">日本名所。實地打卡</span>
-    <button id="stamp-btn" onclick="toggleStampPanel()" aria-label="打卡紀錄">
+    <button id="stamp-btn" onclick="toggleStampPanel()" aria-label="打卡紀錄" data-dev-taps="0" data-dev-last="0">
       <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
         <rect x="5" y="3" width="16" height="20" rx="2.5"/>
         <line x1="9" y1="8" x2="17" y2="8"/>
@@ -626,8 +626,7 @@
     </button>
   </div>
 
-  <!-- 🧪 DEV 觸發按鈕 -->
-  <button id="fake-gps-trigger" onclick="toggleFakePanel()">🧪 DEV</button>
+  <!-- 🧪 DEV 觸發按鈕（隱藏，改由 stamp-btn 連點5次觸發） -->
 
   <!-- 🧪 DEV 面板 -->
   <div id="fake-gps-panel">
@@ -780,6 +779,24 @@
 
 
     /* 切換 DEV 面板 */
+    /* 右上角 stamp-btn 連點5次觸發 DEV 面板 */
+    let _suppressStamp = false;
+    (function() {
+      const btn = document.getElementById('stamp-btn');
+      let taps = 0, lastTap = 0;
+      btn.addEventListener('click', function() {
+        const now = Date.now();
+        if (now - lastTap > 1500) taps = 0;
+        lastTap = now;
+        taps++;
+        if (taps >= 5) {
+          taps = 0;
+          _suppressStamp = true;
+          toggleFakePanel();
+        }
+      });
+    })();
+
     function toggleFakePanel() {
       const panel = document.getElementById('fake-gps-panel');
       const isVisible = panel.classList.contains('visible');
@@ -1331,6 +1348,7 @@
 
     /* 開關印花 Panel */
     function toggleStampPanel() {
+      if (_suppressStamp) { _suppressStamp = false; return; }
       document.getElementById('stamp-panel').classList.toggle('open');
       document.getElementById('stamp-overlay').classList.toggle('open');
     }
