@@ -698,6 +698,14 @@
     <div class="stamp-panel-title">你打哂卡未？</div>
 
     <div id="stamp-list"></div>
+
+    <div style="padding:0 20px 8px;display:flex;gap:10px;">
+      <button onclick="exportCheckins()" style="flex:1;padding:11px 0;border-radius:12px;border:1.5px solid rgba(26,26,46,0.2);background:#fff;font-family:var(--font-serif);font-size:14px;color:rgba(26,26,46,0.7);cursor:pointer;">備份記錄</button>
+      <label style="flex:1;padding:11px 0;border-radius:12px;border:1.5px solid var(--green);background:#fff;font-family:var(--font-serif);font-size:14px;color:var(--green);cursor:pointer;text-align:center;">
+        還原記錄
+        <input type="file" accept=".json" onchange="importCheckins(event)" style="display:none;" />
+      </label>
+    </div>
   </div>
 
   <!-- 成功 Modal -->
@@ -807,6 +815,37 @@
     }
 
     /* 清除所有打卡記錄 */
+    function exportCheckins() {
+      const data = loadCheckins();
+      const json = JSON.stringify({ version: 1, exported: Date.now(), checkins: data }, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `japan47_backup_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function importCheckins(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        try {
+          const parsed = JSON.parse(ev.target.result);
+          const incoming = parsed.checkins || parsed;
+          const existing = loadCheckins();
+          const merged = Object.assign({}, existing, incoming);
+          localStorage.setItem('checkins', JSON.stringify(merged));
+          location.reload();
+        } catch {
+          alert('檔案格式錯誤，請選擇正確的備份檔案。');
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    }
+
     function devClearAll() {
       if (!confirm('確定清除所有打卡記錄？')) return;
       localStorage.removeItem('checkins');
