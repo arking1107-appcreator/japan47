@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>日本47縣 · 實地打卡</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&family=Noto+Sans+JP:wght@300;400;500;700&family=LXGW+WenKai+TC:wght@300;400;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --red:       #D9383A;
+      --green:     #2A9D8F;
+      --red-dark:  #B02C2E;
+      --green-dark:#1E7A6E;
+      --ink:       #1A1A2E;
+      --mist:      rgba(255,255,255,0.72);
+      --shadow:    0 8px 40px rgba(26,26,46,0.18), 0 2px 8px rgba(26,26,46,0.10);
+      --radius:    24px;
+      --font-serif: 'LXGW WenKai TC', serif;
+      --font-sans:  'LXGW WenKai TC', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--font-sans);
+      background: #e8e0d8;
+    }
+
+    /* ── 地圖 ── */
+    #map {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+    #map::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, transparent 50%, rgba(26,26,46,0.25) 100%);
+      pointer-events: none;
+      z-index: 400;
+    }
+
+    /* ── 頂部品牌列 ── */
+    #topbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 800;
+      padding: 14px 20px 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(to bottom, rgba(26,26,46,0.55) 0%, transparent 100%);
+    }
+    .brand-title {
+      font-family: var(--font-serif);
+      font-size: 13px; font-weight: 700;
+      letter-spacing: 0.12em;
+      color: #fff;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+      flex: 1;
+      text-align: center;
+    }
+    #stamp-btn {
+      margin-left: auto;
+      background: none;
+      border: none;
+      padding: 4px 6px;
+      cursor: pointer;
+      line-height: 1;
+      transition: opacity 0.15s;
+      flex-shrink: 0;
+    }
+    #stamp-btn:active { opacity: 0.6; }
+
+    /* ══════════════════════════════════════
+       🧪 FAKE GPS 測試面板
+    ══════════════════════════════════════ */
+    #fake-gps-panel {
+      position: fixed;
+      top: 136px; left: 10px;
+      z-index: 850;
+      background: rgba(255,230,0,0.92);
+      border: 2px solid #e6b800;
+      border-radius: 14px;
+      padding: 10px 14px 12px;
+      min-width: 200px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+      font-family: var(--font-sans);
+      /* 預設隱藏，由 JS 控制顯示 */
+      display: none;
+    }
+    #fake-gps-panel.visible { display: block; }
+
+    .fake-panel-title {
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.1em;
+      color: #7a5c00;
+      margin-bottom: 8px;
+    }
+
+    .fake-preset-btn {
+      display: block;
+      width: 100%;
+      margin-bottom: 6px;
+      padding: 7px 10px;
+      border: 1.5px solid #c9a000;
+      border-radius: 8px;
+      background: #fff8d6;
+      font-size: 11px; font-weight: 600;
+      color: #5a4200;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s;
+    }
+    .fake-preset-btn:hover { background: #ffef99; }
+    .fake-preset-btn.active {
+      background: #e6b800;
+      color: #fff;
+      border-color: #c9a000;
+    }
+
+    .fake-divider { height: 1px; background: #e6b800; margin: 8px 0; }
+
+    .fake-toggle-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #7a5c00;
+      font-weight: 600;
+    }
+    /* 開關 toggle */
+    .toggle-switch {
+      position: relative;
+      width: 36px; height: 20px;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      border-radius: 20px;
+      background: #ccc;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      left: 2px; top: 2px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      transition: 0.3s;
+    }
+    .toggle-switch input:checked + .toggle-slider { background: var(--red); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); }
+
+    /* 🧪 DEV 按鈕（右下角） */
+    #fake-gps-trigger {
+      position: fixed;
+      top: 108px; left: 10px;
+      z-index: 850;
+      background: rgba(255,215,0,0.92);
+      border: 2px solid #e6b800;
+      border-radius: 10px;
+      padding: 5px 10px;
+      font-size: 11px; font-weight: 700;
+      color: #7a5c00;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      letter-spacing: 0.06em;
+      transition: background 0.15s;
+    }
+    #fake-gps-trigger:hover { background: #ffd000; }
+
+    /* ── 47 縣進度列表 ── */
+    .pref-progress-section {
+      padding: 14px 20px 6px;
+      border-bottom: 1px solid rgba(26,26,46,0.07);
+    }
+    .pref-progress-title {
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.1em;
+      color: rgba(26,26,46,0.4);
+      margin-bottom: 10px;
+    }
+    .pref-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .pref-chip {
+      font-size: 11px; font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 20px;
+      border: 1.5px solid currentColor;
+      white-space: nowrap;
+    }
+    .pref-chip.done    { color: var(--green);  background: rgba(42,157,143,0.1); border-color: var(--green); }
+    .pref-chip.partial { color: #b07800;       background: rgba(255,180,0,0.1);  border-color: #c08800; }
+    .pref-chip.undone  { color: var(--red);    background: rgba(217,56,58,0.07); border-color: var(--red); }
+    .pref-chip.none    { color: rgba(26,26,46,0.25); border-color: rgba(26,26,46,0.12); }
+
+    /* ── 底部毛玻璃卡片 ── */
+    #card {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 900;
+      padding: 0 12px max(16px, env(safe-area-inset-bottom));
+      transform: translateY(100%);
+      transition: transform 0.38s cubic-bezier(0.32,0.72,0,1);
+    }
+    #card.visible { transform: translateY(0); pointer-events: all; }
+    #card { pointer-events: none; }
+    .card-inner {
+      background: var(--mist);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-radius: 20px 20px 16px 16px;
+      border: 1px solid rgba(255,255,255,0.55);
+      box-shadow: var(--shadow);
+      padding: 14px 18px 16px;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .badge {
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.14em;
+      padding: 3px 9px;
+      border-radius: 20px;
+      border: 1.5px solid var(--red);
+      color: var(--red);
+      background: rgba(217,56,58,0.08);
+      transition: all 0.45s ease;
+    }
+    .badge.ready {
+      border-color: #c07800;
+      color: #c07800;
+      background: rgba(255,180,0,0.12);
+    }
+    .badge.success {
+      border-color: var(--green);
+      color: var(--green);
+      background: rgba(42,157,143,0.12);
+    }
+    .card-inner.ready {
+      border-color: rgba(255,180,0,0.55);
+      box-shadow: 0 0 0 2px rgba(255,180,0,0.18), var(--shadow);
+    }
+    .pref-tag {
+      font-size: 10px;
+      color: rgba(26,26,46,0.45);
+      letter-spacing: 0.1em;
+    }
+    .spot-name {
+      font-family: 'Shippori Mincho', var(--font-serif);
+      font-size: 22px; font-weight: 700;
+      color: var(--ink);
+      line-height: 1.2;
+      margin-bottom: 2px;
+    }
+    .spot-name-en {
+      font-family: 'Klee One', var(--font-sans);
+      font-size: 10px;
+      color: rgba(26,26,46,0.4);
+      letter-spacing: 0.12em;
+      margin-bottom: 8px;
+    }
+    .divider {
+      height: 1px;
+      background: rgba(26,26,46,0.08);
+      margin-bottom: 8px;
+    }
+    #status-msg {
+      font-size: 12px;
+      line-height: 1.5;
+      color: rgba(26,26,46,0.65);
+      margin-bottom: 10px;
+      transition: all 0.3s ease;
+    }
+    #status-msg.error   { color: #c0392b; }
+    #status-msg.success { color: var(--green); font-weight: 500; }
+
+    #main-btn {
+      width: 100%;
+      padding: 13px 20px;
+      border: none;
+      border-radius: 12px;
+      font-family: var(--font-sans);
+      font-size: 15px; font-weight: 700;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      background: var(--red);
+      color: #fff;
+      box-shadow: 0 4px 18px rgba(217,56,58,0.35);
+      transition: background 0.5s ease, box-shadow 0.5s ease, transform 0.12s ease;
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #main-btn:hover  { background: var(--red-dark); }
+    #main-btn:active { transform: scale(0.97); }
+    #main-btn.loading {
+      opacity: 0.75; cursor: not-allowed;
+      background: #999; box-shadow: none;
+    }
+    #main-btn.unlocked {
+      background: var(--green);
+      box-shadow: 0 4px 18px rgba(42,157,143,0.38);
+    }
+    #main-btn.unlocked:hover { background: var(--green-dark); }
+
+    #camera-input { display: none; }
+
+    /* ── Circular Camera Modal ── */
+    #camera-modal {
+      display: none;
+      position: fixed; inset: 0; z-index: 9999;
+      background: #000;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #camera-modal.open { display: flex; }
+    #camera-video {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .camera-circle-mask {
+      position: relative; z-index: 2;
+      width: min(80vw, 80vh);
+      height: min(80vw, 80vh);
+      border-radius: 50%;
+      overflow: hidden;
+      border: 4px solid rgba(255,255,255,0.9);
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.55);
+    }
+    .camera-circle-mask video {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .camera-controls {
+      position: relative; z-index: 2;
+      display: flex; align-items: center; gap: 32px;
+      margin-top: 40px;
+    }
+    .cam-btn-shutter {
+      width: 72px; height: 72px; border-radius: 50%;
+      background: white; border: 5px solid rgba(255,255,255,0.5);
+      cursor: pointer; outline: none;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.4);
+      transition: transform 0.1s;
+    }
+    .cam-btn-shutter:active { transform: scale(0.9); }
+    .cam-btn-cancel {
+      background: rgba(255,255,255,0.18); border: none;
+      color: white; font-size: 15px; padding: 12px 20px;
+      border-radius: 24px; cursor: pointer;
+      font-family: var(--font-sans);
+    }
+    .cam-btn-flip {
+      background: rgba(255,255,255,0.18); border: none;
+      color: white; font-size: 22px; padding: 12px 16px;
+      border-radius: 50%; cursor: pointer; width: 48px; height: 48px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .distance-bar-wrap { margin-bottom: 14px; display: none; }
+    .distance-bar-wrap.visible { display: block; }
+    .distance-bar-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: rgba(26,26,46,0.4);
+      margin-bottom: 5px;
+      letter-spacing: 0.06em;
+    }
+    .distance-bar-track {
+      height: 4px;
+      background: rgba(26,26,46,0.1);
+      border-radius: 99px; overflow: hidden;
+    }
+    .distance-bar-fill {
+      height: 100%; border-radius: 99px;
+      background: var(--red);
+      transition: width 0.6s ease, background 0.5s ease;
+    }
+
+    /* ── Pref progress bar ── */
+    .pref-prog-wrap { margin-top: 8px; }
+    .pref-prog-label {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-size: 13px; color: var(--ink); margin-bottom: 5px;
+    }
+    .pref-prog-label .prog-count { font-weight: 700; }
+    .pref-prog-label .prog-pct { font-size: 12px; color: var(--green); font-weight: 700; }
+    .pref-prog-track {
+      height: 5px; background: rgba(26,26,46,0.1);
+      border-radius: 99px; overflow: hidden;
+    }
+    .pref-prog-fill {
+      height: 100%; border-radius: 99px; background: var(--green);
+      transition: width 0.6s cubic-bezier(0.34,1.56,0.64,1);
+    }
+
+    /* ── 成功 Modal ── */
+    #success-modal {
+      position: fixed; inset: 0; z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+      background: rgba(26,26,46,0.55);
+      backdrop-filter: blur(6px);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+    #success-modal.show { opacity: 1; pointer-events: all; }
+    .modal-box {
+      background: #fff; border-radius: 28px;
+      padding: 36px 28px 30px;
+      max-width: 340px; width: 100%;
+      text-align: center;
+      box-shadow: 0 24px 60px rgba(26,26,46,0.25);
+      transform: translateY(20px);
+      transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    #success-modal.show .modal-box { transform: translateY(0); }
+    .modal-stamp { font-size: 58px; margin-bottom: 12px; line-height: 1; }
+    .modal-title {
+      font-family: var(--font-serif);
+      font-size: 20px; font-weight: 700;
+      color: var(--ink); margin-bottom: 8px;
+    }
+    .modal-desc {
+      font-size: 13px; color: rgba(26,26,46,0.55);
+      line-height: 1.8; margin-bottom: 24px;
+    }
+    .modal-close {
+      display: inline-block; padding: 12px 36px;
+      background: var(--green); color: #fff;
+      border: none; border-radius: 12px;
+      font-size: 14px; font-weight: 700;
+      cursor: pointer; letter-spacing: 0.06em;
+      box-shadow: 0 4px 14px rgba(42,157,143,0.35);
+      transition: background 0.2s;
+    }
+    .modal-close:hover { background: var(--green-dark); }
+
+    /* ── Leaflet named marker ── */
+    .spot-named-marker {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      transform: translate(-50%, -100%);
+      transform-origin: 50% 100%;
+      pointer-events: auto;
+    }
+    .spot-name-chip {
+      font-size: 11px; font-weight: 700; color: #fff;
+      padding: 3px 9px; border-radius: 8px; white-space: nowrap;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.28);
+      letter-spacing: 0.03em;
+      font-family: var(--font-serif);
+    }
+    .spot-name-chip.chip-red   { background: var(--red); }
+    .spot-name-chip.chip-green { background: var(--green); }
+    .spot-name-chip.chip-gray  { background: rgba(26,26,46,0.42); }
+    .spot-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+    .spot-dot.chip-red   { background: var(--red); }
+    .spot-dot.chip-green { background: var(--green); }
+    .spot-dot.chip-gray  { background: rgba(26,26,46,0.38); }
+    .leaflet-control-container { z-index: 800; }
+
+    /* ── Photo Marker (覆蓋紅點) ── */
+    .photo-marker-wrap {
+      animation: storyPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both;
+    }
+    @keyframes storyPop {
+      from { transform: scale(0); opacity: 0; }
+      to   { transform: scale(1); opacity: 1; }
+    }
+    .photo-marker-ring {
+      width: 60px; height: 60px;
+      border-radius: 50%;
+      padding: 4px;
+      background: var(--green);
+      box-shadow: 0 3px 14px rgba(42,157,143,0.55);
+      flex-shrink: 0;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    .photo-marker-img {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background-size: cover;
+      background-position: center;
+      border: 2px solid #fff;
+      display: block;
+      flex-shrink: 0;
+    }
+
+    /* ── 印花收集 Panel ── */
+
+    #stamp-panel {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 1100;
+      background: #fff;
+      border-radius: 24px 24px 0 0;
+      box-shadow: 0 -8px 40px rgba(26,26,46,0.18);
+      padding: 0 0 40px;
+      max-height: 75vh;
+      overflow-y: auto;
+      transform: translateY(100%);
+      transition: transform 0.38s cubic-bezier(0.32,0.72,0,1);
+    }
+    #stamp-panel.open { transform: translateY(0); }
+
+    .stamp-panel-handle {
+      width: 40px; height: 4px;
+      background: rgba(26,26,46,0.15);
+      border-radius: 99px;
+      margin: 12px auto 0;
+    }
+    .stamp-panel-title {
+      font-family: var(--font-serif);
+      font-size: 17px; font-weight: 700;
+      color: var(--ink);
+      padding: 16px 20px 8px;
+    }
+    .stamp-pref-header {
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.12em;
+      color: rgba(26,26,46,0.4);
+      padding: 12px 20px 6px;
+      border-top: 1px solid rgba(26,26,46,0.07);
+    }
+    .stamp-item {
+      display: flex; align-items: center;
+      padding: 12px 20px;
+      gap: 14px;
+    }
+    .stamp-icon {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      background: rgba(26,26,46,0.06);
+      overflow: hidden;
+    }
+    .stamp-icon img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+    }
+    .stamp-icon.collected {
+      border: 3px solid var(--green);
+      background: rgba(42,157,143,0.08);
+    }
+    .stamp-info { flex: 1; }
+    .stamp-name {
+      font-size: 15px; font-weight: 500;
+      color: var(--ink);
+    }
+    .stamp-name.uncollected { color: rgba(26,26,46,0.3); }
+    .stamp-sub {
+      font-size: 11px;
+      color: rgba(26,26,46,0.35);
+      margin-top: 2px;
+    }
+    .stamp-tick {
+      font-size: 18px;
+      color: var(--green);
+    }
+    .stamp-item {
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .stamp-item:active { background: rgba(26,26,46,0.05); }
+    #stamp-overlay {
+      position: fixed; inset: 0;
+      z-index: 1099;
+      background: rgba(26,26,46,0.35);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    #stamp-overlay.open { opacity: 1; pointer-events: all; }
+  </style>
+</head>
+<body>
+
+  <div id="map"></div>
+
+  <!-- 頂部品牌列 -->
+  <div id="topbar">
+    <div style="width:32px;flex-shrink:0;"></div>
+    <span class="brand-title">日本名所。實地打卡</span>
+    <button id="stamp-btn" onclick="toggleStampPanel()" aria-label="打卡紀錄">
+      <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="5" y="3" width="16" height="20" rx="2.5"/>
+        <line x1="9" y1="8" x2="17" y2="8"/>
+        <line x1="9" y1="12" x2="17" y2="12"/>
+        <line x1="9" y1="16" x2="14" y2="16"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- 🧪 DEV 觸發按鈕 -->
+  <button id="fake-gps-trigger" onclick="toggleFakePanel()">🧪 DEV</button>
+
+  <!-- 🧪 DEV 面板 -->
+  <div id="fake-gps-panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div class="fake-panel-title" style="margin-bottom:0;">🧪 開發測試</div>
+      <button onclick="toggleFakePanel()" style="background:none;border:none;font-size:16px;cursor:pointer;color:#7a5c00;padding:0;">✕</button>
+    </div>
+    <div style="font-size:10px;color:#7a5c00;margin-bottom:6px;font-weight:600;">當前景點：<span id="dev-spot-name">–</span></div>
+    <button class="fake-preset-btn" onclick="testPhotoDirectly()">
+      📍 模擬打卡當前景點
+    </button>
+    <div class="fake-divider"></div>
+    <button class="fake-preset-btn" style="background:#ffe0e0;border-color:#e07070;color:#800000;margin-bottom:0;" onclick="devClearAll()">
+      🗑 清除所有打卡記錄
+    </button>
+  </div>
+
+  <!-- 底部毛玻璃卡片 -->
+  <div id="card">
+    <div class="card-inner">
+      <div class="card-header">
+        <span class="badge" id="badge">未解鎖</span>
+        <span class="pref-tag" id="pref-tag"></span>
+        <button onclick="dismissCard()" style="background:none;border:none;font-size:18px;color:rgba(26,26,46,0.3);cursor:pointer;padding:0 0 0 8px;line-height:1;">✕</button>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:2px;">
+        <div class="spot-name" id="spot-name"></div>
+        <div id="checkin-date" style="font-size:11px;color:rgba(26,26,46,0.4);text-align:right;padding-bottom:3px;"></div>
+      </div>
+      <div class="spot-name-en" id="spot-name-en"></div>
+      <div class="divider"></div>
+
+      <div class="distance-bar-wrap" id="dist-bar-wrap">
+        <div class="distance-bar-label">
+          <span>你的位置</span>
+          <span id="dist-bar-text">–</span>
+          <span id="dist-bar-target"></span>
+        </div>
+        <div class="distance-bar-track">
+          <div class="distance-bar-fill" id="dist-bar-fill" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div id="status-msg"></div>
+      <button id="main-btn" onclick="handleMainBtn()">Check in now</button>
+      <input type="file" id="camera-input" accept="image/*" capture="camera" onchange="handlePhotoFallback(this)" />
+    </div>
+  </div>
+
+  <!-- Circular Camera Modal -->
+  <div id="camera-modal">
+    <div class="camera-circle-mask">
+      <video id="camera-video" autoplay playsinline muted></video>
+    </div>
+    <div class="camera-controls">
+      <button class="cam-btn-cancel" onclick="closeCamera()">取消</button>
+      <button class="cam-btn-shutter" onclick="capturePhoto()" aria-label="拍攝"></button>
+      <button class="cam-btn-flip" onclick="flipCamera()" aria-label="翻轉鏡頭">🔄</button>
+    </div>
+  </div>
+
+  <!-- 印花收集 Panel 背景遮罩 -->
+  <div id="stamp-overlay" onclick="toggleStampPanel()"></div>
+
+  <!-- 印花收集 Panel -->
+  <div id="stamp-panel">
+    <div class="stamp-panel-handle"></div>
+    <div class="stamp-panel-title">你打哂卡未？</div>
+
+    <div id="stamp-list"></div>
+  </div>
+
+  <!-- 成功 Modal -->
+  <div id="success-modal">
+    <div class="modal-box">
+      <div id="modal-photo-wrap" style="display:none;margin-bottom:16px;">
+        <img id="modal-photo" style="width:110px;height:110px;border-radius:50%;object-fit:cover;border:3px solid #fff;box-shadow:0 4px 16px rgba(0,0,0,0.2);outline:3px solid #2A9D8F;" />
+      </div>
+      <div class="modal-title" id="modal-spot-name" style="font-family:var(--font-serif);font-size:22px;margin-bottom:4px;"></div>
+      <div id="modal-date" style="font-size:12px;color:rgba(26,26,46,0.45);margin-bottom:14px;"></div>
+      <div id="modal-progress" style="text-align:center;margin-bottom:16px;"></div>
+      <div id="modal-global" style="margin-bottom:24px;"></div>
+      <button class="modal-close" onclick="closeModal()">繼續旅程</button>
+    </div>
+  </div>
+
+  <script>
+    /* ============================================
+       所有景點資料
+    ============================================ */
+    const ALL_PREFS = [
+      '北海道','青森県','岩手県','宮城県','秋田県','山形県','福島県',
+      '茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県',
+      '新潟県','富山県','石川県','福井県','山梨県','長野県','岐阜県',
+      '静岡県','愛知県','三重県','滋賀県','京都府','大阪府','兵庫県',
+      '奈良県','和歌山県','鳥取県','島根県','岡山県','広島県','山口県',
+      '徳島県','香川県','愛媛県','高知県','福岡県','佐賀県','長崎県',
+      '熊本県','大分県','宮崎県','鹿児島県','沖縄県'
+    ];
+
+    const SPOTS = [
+      { id: 'tokyo-tower',   name: '東京鐵塔', nameEn: 'TOKYO TOWER',   pref: '東京都', prefLabel: '東京都 · TOKYO', emoji: '🗼', lat: 35.6586, lng: 139.7454, radiusMeters: 500 },
+      { id: 'tokyo-skytree', name: '晴空塔',   nameEn: 'TOKYO SKYTREE', pref: '東京都', prefLabel: '東京都 · TOKYO', emoji: '🏙', lat: 35.7101, lng: 139.8107, radiusMeters: 500 },
+      { id: 'osaka-castle',  name: '大阪城',   nameEn: 'OSAKA CASTLE',  pref: '大阪府', prefLabel: '大阪府 · OSAKA', emoji: '🏯', lat: 34.6873, lng: 135.5262, radiusMeters: 500 },
+      { id: 'kamakura-daibutsu', name: '鎌倉大佛', nameEn: 'KAMAKURA DAIBUTSU', pref: '神奈川県', prefLabel: '神奈川県 · KANAGAWA', emoji: '🗿', lat: 35.3167, lng: 139.5352, radiusMeters: 500 },
+    ];
+
+    let activeSpot = SPOTS[0];
+    let TARGET = activeSpot;
+
+    /* ============================================
+       localStorage 打卡記錄
+    ============================================ */
+    function formatDate(ts) {
+      if (!ts) return '';
+      const d = new Date(ts);
+      return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+    }
+
+    function saveCheckin(id, dataUrl) {
+      const records = JSON.parse(localStorage.getItem('checkins') || '{}');
+      records[id] = { dataUrl, ts: Date.now() };
+      localStorage.setItem('checkins', JSON.stringify(records));
+    }
+
+    function loadCheckins() {
+      return JSON.parse(localStorage.getItem('checkins') || '{}');
+    }
+
+    function restoreCheckins() {
+      buildStampList();
+      const records = loadCheckins();
+      SPOTS.forEach(spot => {
+        if (records[spot.id]) {
+          placePhotoMarker(spot, records[spot.id].dataUrl);
+        }
+      });
+      switchSpot(SPOTS[0]);
+      dismissCard();
+    }
+
+    /* ============================================
+       🧪 FAKE GPS 設定
+       fakeGpsEnabled  : 是否啟用假 GPS
+       fakeCoords      : 目前模擬的座標
+    ============================================ */
+    let fakeGpsEnabled = false;
+    let fakeCoords = null;
+
+
+    /* 切換 DEV 面板 */
+    function toggleFakePanel() {
+      const panel = document.getElementById('fake-gps-panel');
+      const isVisible = panel.classList.contains('visible');
+      panel.classList.toggle('visible', !isVisible);
+      if (!isVisible) {
+        document.getElementById('dev-spot-name').textContent = activeSpot.name;
+      }
+    }
+
+    /* 清除所有打卡記錄 */
+    function devClearAll() {
+      if (!confirm('確定清除所有打卡記錄？')) return;
+      localStorage.removeItem('checkins');
+      location.reload();
+    }
+
+    /* 重置打卡狀態（方便反復測試） */
+    function resetCheckInState() {
+      switchSpot(activeSpot);
+    }
+
+    /* ============================================
+       狀態機
+    ============================================ */
+    let appState = 'idle';
+
+    /* ============================================
+       Leaflet 地圖初始化
+    ============================================ */
+    const map = L.map('map', {
+      center: [SPOTS[0].lat, SPOTS[0].lng],
+      zoom: 15,
+      zoomControl: true,
+      attributionControl: false
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      subdomains: 'abcd', maxZoom: 19
+    }).addTo(map);
+
+    function makeNamedIcon(spot, state) {
+      const ringStyle = state === 'red'
+        ? 'border:3px solid var(--red);background:rgba(217,56,58,0.12);box-shadow:0 2px 10px rgba(217,56,58,0.3);'
+        : 'border:3px solid rgba(26,26,46,0.3);background:rgba(26,26,46,0.08);box-shadow:0 2px 8px rgba(0,0,0,0.18);';
+      return L.divIcon({
+        className: '',
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+        html: `<div class="spot-named-marker">
+          <div class="spot-name-chip chip-${state}">${spot.name}</div>
+          <div style="width:50px;height:50px;border-radius:50%;${ringStyle}"></div>
+        </div>`
+      });
+    }
+
+    // 每個景點的地圖物件
+    const spotLayers = {};
+
+    let userMarker = null;
+    let storyMarker = null;
+
+    SPOTS.forEach(spot => {
+      const marker = L.marker([spot.lat, spot.lng], { icon: makeNamedIcon(spot, 'gray') })
+        .addTo(map)
+        .on('click', () => { switchSpot(spot); map.flyTo([spot.lat, spot.lng], 16, { duration: 1.2 }); });
+      const circle = L.circle([spot.lat, spot.lng], {
+        radius: spot.radiusMeters,
+        color: '#aaa', fillColor: '#aaa',
+        fillOpacity: 0, weight: 0, opacity: 0
+      });
+      spotLayers[spot.id] = { spot, marker, circle, photoMarker: null, photoDataUrl: null };
+    });
+
+    /* 切換當前景點 */
+    function switchSpot(spot) {
+      activeSpot = spot;
+      TARGET = spot;
+      showCard();
+      const checkins = loadCheckins();
+      const done = !!checkins[spot.id];
+
+      // 更新底部卡片文字
+      document.getElementById('pref-tag').textContent = spot.prefLabel;
+      document.getElementById('spot-name').textContent = spot.name;
+      document.getElementById('spot-name-en').textContent = spot.nameEn;
+      document.getElementById('dist-bar-target').textContent = spot.name;
+
+      // 重置所有景點 marker（有相片就保持隱藏）
+      Object.values(spotLayers).forEach(({ spot: s, marker, circle, photoMarker }) => {
+        marker.setIcon(makeNamedIcon(s, photoMarker ? 'green' : 'gray'));
+        marker.setOpacity(photoMarker ? 0 : 1);
+        circle.setStyle({ color: photoMarker ? '#2A9D8F' : '#aaa', fillColor: photoMarker ? '#2A9D8F' : '#aaa' });
+      });
+
+      const layer = spotLayers[spot.id];
+
+      if (done) {
+        appState = 'done';
+        layer.marker.setOpacity(0);
+        document.getElementById('badge').textContent = '卡已打';
+        document.getElementById('badge').className = 'badge success';
+        document.querySelector('.card-inner').classList.remove('ready');
+        document.getElementById('main-btn').textContent = '重新拍照';
+        document.getElementById('main-btn').disabled = false;
+        document.getElementById('main-btn').className = 'unlocked';
+        document.getElementById('dist-bar-wrap').classList.remove('visible');
+        document.getElementById('checkin-date').textContent = formatDate(checkins[spot.id]?.ts);
+        setStatus(getPrefProgress(spot.pref), 'success');
+      } else {
+        appState = 'idle';
+        layer.marker.setIcon(makeNamedIcon(spot, 'red'));
+        layer.marker.setOpacity(1);
+        document.getElementById('badge').textContent = '未解鎖';
+        document.getElementById('badge').className = 'badge';
+        document.getElementById('main-btn').textContent = 'Check in now';
+        document.getElementById('main-btn').disabled = false;
+        document.getElementById('main-btn').className = '';
+        document.getElementById('dist-bar-wrap').classList.remove('visible');
+        document.querySelector('.card-inner').classList.remove('ready');
+        document.getElementById('checkin-date').textContent = '';
+        setStatus('到咗現場就快啲打卡！', '');
+      }
+      updateMarkerScale();
+    }
+
+    function makeSimpleIcon(state) {
+      const c = { gray: 'rgba(26,26,46,0.4)', green: '#2A9D8F', red: '#D9383A' }[state] || 'rgba(26,26,46,0.4)';
+      return L.divIcon({
+        className: '',
+        iconSize: [0, 0], iconAnchor: [0, 0],
+        html: `<div style="width:14px;height:14px;border-radius:50%;background:${c};border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.3);transform:translate(-50%,-50%);"></div>`
+      });
+    }
+
+    const _spotModes = {};
+
+    function applyZoomScale() {
+      const zoom = map.getZoom();
+      const scale = Math.max(0.25, Math.min(1, (zoom - 8) / 6));
+      document.querySelectorAll('.spot-named-marker').forEach(el => {
+        el.style.transform = `translate(-50%, -100%) scale(${scale.toFixed(3)})`;
+      });
+    }
+
+    function updateMarkerScale() {
+      const zoom = map.getZoom();
+      const simple = zoom < 9;
+      const checkins = loadCheckins();
+      Object.values(spotLayers).forEach(({ spot: s, marker, photoMarker }) => {
+        const done = !!checkins[s.id];
+        const isActive = activeSpot && s.id === activeSpot.id;
+        const mode = simple ? 'simple' : done ? 'photo' : isActive ? 'named-red' : 'named-gray';
+        const changed = _spotModes[s.id] !== mode;
+        _spotModes[s.id] = mode;
+        if (!changed) return;
+        if (simple) {
+          marker.setIcon(makeSimpleIcon(done ? 'green' : 'gray'));
+          marker.setOpacity(1);
+          if (photoMarker) photoMarker.setOpacity(0);
+        } else {
+          if (done) {
+            marker.setOpacity(0);
+            if (photoMarker) photoMarker.setOpacity(1);
+          } else {
+            marker.setIcon(makeNamedIcon(s, isActive ? 'red' : 'gray'));
+            marker.setOpacity(1);
+          }
+        }
+      });
+      applyZoomScale();
+    }
+
+    map.on('zoom', applyZoomScale);
+    map.on('zoomend', updateMarkerScale);
+
+
+    /* 放相片 marker 係地圖上 */
+    function makePhotoIcon(spot, dataUrl) {
+      const size = 60, inner = 50;
+      return L.divIcon({
+        className: '',
+        iconSize: [0, 0], iconAnchor: [0, 0],
+        html: `<div class="spot-named-marker">
+          <div class="spot-name-chip chip-green">${spot.name}</div>
+          <div class="photo-marker-wrap">
+            <div class="photo-marker-ring" style="width:${size}px;height:${size}px;padding:3px;display:flex;align-items:center;justify-content:center;">
+              <div class="photo-marker-img" style="width:${inner}px;height:${inner}px;flex-shrink:0;background-image:url('${dataUrl}')"></div>
+            </div>
+          </div>
+        </div>`
+      });
+    }
+
+    function placePhotoMarker(spot, dataUrl) {
+      const layer = spotLayers[spot.id];
+      layer.photoDataUrl = dataUrl;
+      if (layer.photoMarker) map.removeLayer(layer.photoMarker);
+      layer.photoMarker = L.marker([spot.lat, spot.lng], { icon: makePhotoIcon(spot, dataUrl), zIndexOffset: 1000 })
+        .addTo(map)
+        .on('click', () => { switchSpot(spot); map.flyTo([spot.lat, spot.lng], 16, { duration: 1.2 }); });
+      layer.circle.setStyle({ color: '#2A9D8F', fillColor: '#2A9D8F' });
+      layer.marker.setOpacity(0);
+    }
+
+    /* 建立印花 list */
+    function buildStampList() {
+      const checkins = loadCheckins();
+
+      // 按 pref 分組 SPOTS
+      const spotsByPref = {};
+      SPOTS.forEach(spot => {
+        if (!spotsByPref[spot.pref]) spotsByPref[spot.pref] = [];
+        spotsByPref[spot.pref].push(spot);
+      });
+
+      // 47 県進度網格
+      let gridHtml = `<div class="pref-progress-section" style="margin-bottom:16px;">${getGlobalStatsHtml()}</div><div class="pref-progress-section"><div class="pref-progress-title">全国 47 都道府県</div><div class="pref-grid">`;
+      ALL_PREFS.forEach(pref => {
+        const prefSpots = spotsByPref[pref] || [];
+        const checkedCount = prefSpots.filter(s => !!checkins[s.id]).length;
+        const total = prefSpots.length;
+        if (total === 0) {
+          gridHtml += `<span class="pref-chip none">${pref}</span>`;
+        } else if (checkedCount === total) {
+          gridHtml += `<span class="pref-chip done" onclick="scrollToPref('${pref}')">${pref}</span>`;
+        } else if (checkedCount > 0) {
+          gridHtml += `<span class="pref-chip partial" onclick="scrollToPref('${pref}')">${pref}</span>`;
+        } else {
+          gridHtml += `<span class="pref-chip undone" onclick="scrollToPref('${pref}')">${pref}</span>`;
+        }
+      });
+      gridHtml += '</div></div>';
+
+      // 景點詳細列表
+      let listHtml = '';
+      Object.entries(spotsByPref).forEach(([pref, spots]) => {
+        const checkedCount = spots.filter(s => !!checkins[s.id]).length;
+        listHtml += `<div class="stamp-pref-header" id="pref-section-${pref}">${pref} ${checkedCount}／${spots.length}</div>`;
+        spots.forEach(spot => {
+          const done = !!checkins[spot.id];
+          const imgHtml = done ? `<img src="${checkins[spot.id].dataUrl}" />` : '';
+          listHtml += `<div class="stamp-item" id="stamp-item-${spot.id}" onclick="flyToSpot('${spot.id}')">
+            <div class="stamp-icon ${done ? 'collected' : ''}" id="stamp-icon-${spot.id}">${imgHtml}</div>
+            <div class="stamp-info">
+              <div class="stamp-name ${done ? '' : 'uncollected'}" id="stamp-name-${spot.id}">${spot.name}</div>
+              <div class="stamp-sub" id="stamp-sub-${spot.id}">${spot.nameEn}${done ? ' · ' + formatDate(checkins[spot.id]?.ts) : ''}</div>
+            </div>
+            <div class="stamp-tick" id="stamp-tick-${spot.id}" style="display:${done ? 'block' : 'none'};">✓</div>
+          </div>`;
+        });
+      });
+
+      document.getElementById('stamp-list').innerHTML = gridHtml + listHtml;
+    }
+
+    function getGlobalStatsHtml() {
+      const checkins = loadCheckins();
+      const prefsWithAny = ALL_PREFS.filter(p => SPOTS.some(s => s.pref === p && !!checkins[s.id])).length;
+      const prefPct = Math.round(prefsWithAny / 47 * 100);
+      const spotsDone = SPOTS.filter(s => !!checkins[s.id]).length;
+      const spotsPct = Math.round(spotsDone / SPOTS.length * 100);
+      const seihaBadge = `<span style="font-size:10px;font-weight:700;color:#fff;background:var(--green);padding:1px 5px;border-radius:5px;letter-spacing:0.04em;line-height:1.6;">制覇</span>`;
+      return `
+        <div class="pref-prog-wrap" style="margin-bottom:10px;">
+          <div class="pref-prog-label">
+            <span style="display:inline-flex;align-items:center;gap:5px;">都道府県　<span class="prog-count">${prefsWithAny}／47</span>${prefPct === 100 ? seihaBadge : ''}</span>
+            <span class="prog-pct">${prefPct}%</span>
+          </div>
+          <div class="pref-prog-track"><div class="pref-prog-fill" style="width:${prefPct}%"></div></div>
+        </div>
+        <div class="pref-prog-wrap">
+          <div class="pref-prog-label">
+            <span style="display:inline-flex;align-items:center;gap:5px;">全日本名所　<span class="prog-count">${spotsDone}／${SPOTS.length}</span>${spotsPct === 100 ? seihaBadge : ''}</span>
+            <span class="prog-pct">${spotsPct}%</span>
+          </div>
+          <div class="pref-prog-track"><div class="pref-prog-fill" style="width:${spotsPct}%"></div></div>
+        </div>`;
+    }
+
+    /* 滾動到指定県的景點列表 */
+    function scrollToPref(pref) {
+      const el = document.getElementById('pref-section-' + pref);
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    /* 計算某県打卡進度文字 */
+    function getPrefProgress(prefName) {
+      const checkins = loadCheckins();
+      const prefSpots = SPOTS.filter(s => s.pref === prefName);
+      if (prefSpots.length === 0) return '';
+      const done = prefSpots.filter(s => !!checkins[s.id]).length;
+      const pct = Math.round(done / prefSpots.length * 100);
+      return `<div class="pref-prog-wrap">
+        <div class="pref-prog-label">
+          <span style="display:inline-flex;align-items:center;gap:5px;">${prefName}　<span class="prog-count">${done}／${prefSpots.length}</span>${pct === 100 ? '<span style="font-size:10px;font-weight:700;color:#fff;background:var(--green);padding:1px 5px;border-radius:5px;letter-spacing:0.04em;line-height:1.6;">制覇</span>' : ''}</span>
+          <span class="prog-pct">${pct}%</span>
+        </div>
+        <div class="pref-prog-track"><div class="pref-prog-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }
+
+    /* 更新單一印花項目 */
+    function updateStampItem(id, dataUrl) {
+      const icon = document.getElementById('stamp-icon-' + id);
+      const name = document.getElementById('stamp-name-' + id);
+      const tick = document.getElementById('stamp-tick-' + id);
+      if (!icon) return;
+      icon.classList.add('collected');
+      icon.innerHTML = `<img src="${dataUrl}" />`;
+      if (name) name.classList.remove('uncollected');
+      if (tick) tick.style.display = 'block';
+      const sub = document.getElementById('stamp-sub-' + id);
+      const spot = SPOTS.find(s => s.id === id);
+      if (sub && spot) sub.textContent = spot.nameEn + ' · ' + formatDate(Date.now());
+    }
+
+    /* ============================================
+       Haversine 公式（計算直線距離，公尺）
+    ============================================ */
+    function haversineDistance(lat1, lng1, lat2, lng2) {
+      const R = 6371000;
+      const toRad = d => d * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLng = toRad(lng2 - lng1);
+      const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    /* ============================================
+       主按鈕點擊
+    ============================================ */
+    function handleMainBtn() {
+      if (appState === 'near') {
+        openCamera();
+        return;
+      }
+      if (appState === 'locating') return;
+      if (appState === 'done') { appState = 'idle'; startLocating(); return; }
+      startLocating();
+    }
+
+    /* ============================================
+       定位流程
+       🧪 若 fakeGpsEnabled 且 fakeCoords 已設定，
+          直接模擬 GPS 結果，跳過真實定位
+    ============================================ */
+    function startLocating() {
+      appState = 'locating';
+      setStatus('正在獲取你的精準 GPS 位置，請稍候…', '');
+      const btn = document.getElementById('main-btn');
+      btn.textContent = '⏳ 定位中…';
+      btn.classList.add('loading');
+      btn.disabled = true;
+
+      // 🧪 Fake GPS 模式：模擬 0.8 秒延遲後直接給結果
+      if (fakeGpsEnabled && fakeCoords) {
+        setTimeout(() => {
+          onGeoSuccess({
+            coords: {
+              latitude:  fakeCoords.lat,
+              longitude: fakeCoords.lng,
+              accuracy:  5  // 模擬高精度（±5m）
+            }
+          });
+        }, 800);
+        return;
+      }
+
+      // 真實 GPS 定位
+      if (!navigator.geolocation) {
+        handleGeoError({ code: 0 });
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        onGeoSuccess,
+        handleGeoError,
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+
+    /* ============================================
+       定位成功處理
+    ============================================ */
+    function onGeoSuccess(position) {
+      const { latitude: uLat, longitude: uLng, accuracy } = position.coords;
+      const dist   = haversineDistance(uLat, uLng, TARGET.lat, TARGET.lng);
+      const distKm = (dist / 1000).toFixed(2);
+      const distM  = Math.round(dist);
+
+      updateUserMarker(uLat, uLng);
+      updateDistanceBar(dist);
+
+      const btn = document.getElementById('main-btn');
+      btn.disabled = false;
+      btn.classList.remove('loading');
+
+      if (dist > TARGET.radiusMeters) {
+        appState = 'far';
+        setStatus(
+          `解鎖失敗。你距離${TARGET.name}還有 <strong>${distKm} 公里</strong>，請親臨現場解鎖。<br/>
+           <span style="font-size:11px;opacity:0.7">GPS 精準度：±${Math.round(accuracy)} 公尺${fakeGpsEnabled ? ' · 🧪 Fake GPS 模式' : ''}</span>`,
+          'error'
+        );
+        btn.textContent = '📍 重新驗證 GPS 位置';
+        document.getElementById('badge').textContent = '未解鎖';
+        document.getElementById('badge').classList.remove('success');
+      } else {
+        appState = 'near';
+        setStatus(
+          `你喺現場了！快啲影相打卡啦！
+           ${fakeGpsEnabled ? '<br/><span style="font-size:11px;opacity:0.6">🧪 Fake GPS 模式</span>' : ''}`,
+          'success'
+        );
+        btn.textContent = '開相機';
+        btn.classList.add('unlocked');
+        document.getElementById('badge').textContent = '可打卡';
+        document.getElementById('badge').className = 'badge ready';
+        document.querySelector('.card-inner').classList.add('ready');
+        spotLayers[activeSpot.id].circle.setStyle({ color: '#2A9D8F', fillColor: '#2A9D8F' });
+      }
+    }
+
+    /* ============================================
+       定位錯誤處理
+    ============================================ */
+    function handleGeoError(error) {
+      appState = 'idle';
+      const btn = document.getElementById('main-btn');
+      btn.disabled = false;
+      btn.classList.remove('loading');
+      btn.textContent = '📍 重新驗證 GPS 位置';
+      let msg = '';
+      switch (error.code) {
+        case 1: msg = `⚠️ <strong>定位權限被拒絕。</strong><br/>請前往手機設定 → 瀏覽器（Safari / Chrome）→「位置」→ 選擇「使用 App 期間」，然後重新整理頁面。`; break;
+        case 2: msg = `⚠️ <strong>無法獲取 GPS 訊號。</strong><br/>請到室外開闊地點，或關閉飛航模式後重試。`; break;
+        case 3: msg = `⚠️ <strong>定位逾時。</strong><br/>請確認 GPS 已開啟，在訊號較強的位置重試。`; break;
+        default: msg = `⚠️ <strong>瀏覽器不支援 GPS 定位。</strong><br/>請改用 iPhone Safari 或 Android Chrome。`;
+      }
+      setStatus(msg, 'error');
+    }
+
+    /* ============================================
+       圓形相機
+    ============================================ */
+    let cameraStream = null;
+    let facingMode = 'environment';
+
+    function openCamera() {
+      const modal = document.getElementById('camera-modal');
+      modal.classList.add('open');
+      startStream();
+    }
+
+    function startStream() {
+      if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+      navigator.mediaDevices.getUserMedia({ video: { facingMode, width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false })
+        .then(stream => {
+          cameraStream = stream;
+          document.getElementById('camera-video').srcObject = stream;
+        })
+        .catch(() => {
+          closeCamera();
+          document.getElementById('camera-input').click();
+        });
+    }
+
+    function flipCamera() {
+      facingMode = facingMode === 'environment' ? 'user' : 'environment';
+      startStream();
+    }
+
+    function closeCamera() {
+      if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+      document.getElementById('camera-modal').classList.remove('open');
+    }
+
+    function capturePhoto() {
+      const video = document.getElementById('camera-video');
+      const size = 200;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.beginPath();
+      ctx.arc(size/2, size/2, size/2, 0, Math.PI*2);
+      ctx.clip();
+      const vw = video.videoWidth, vh = video.videoHeight;
+      const side = Math.min(vw, vh);
+      ctx.drawImage(video, (vw-side)/2, (vh-side)/2, side, side, 0, 0, size, size);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.45);
+      closeCamera();
+      processCheckin(dataUrl);
+    }
+
+    function handlePhotoFallback(input) {
+      if (!input.files || input.files.length === 0) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        compressImage(e.target.result, function(dataUrl) { processCheckin(dataUrl); });
+      };
+      reader.readAsDataURL(input.files[0]);
+      input.value = '';
+    }
+
+    function processCheckin(dataUrl) {
+      appState = 'done';
+      const btn = document.getElementById('main-btn');
+      btn.textContent = '重新拍照';
+      btn.disabled = false;
+      btn.classList.add('unlocked');
+      document.getElementById('badge').textContent = '卡已打';
+      document.getElementById('badge').className = 'badge success';
+      document.querySelector('.card-inner').classList.remove('ready');
+      try { saveCheckin(activeSpot.id, dataUrl); } catch(err) { console.warn('儲存失敗:', err); }
+      document.getElementById('checkin-date').textContent = formatDate(Date.now());
+      setStatus(getPrefProgress(activeSpot.pref), 'success');
+      showStoryMarker(dataUrl);
+      showSuccessModal(dataUrl);
+    }
+
+    function compressImage(dataUrl, callback) {
+      const img = new Image();
+      img.onload = function() {
+        const size = 160;
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.beginPath();
+        ctx.arc(size/2, size/2, size/2, 0, Math.PI*2);
+        ctx.clip();
+        const minSide = Math.min(img.width, img.height);
+        const sx = (img.width - minSide) / 2;
+        const sy = (img.height - minSide) / 2;
+        ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+        callback(canvas.toDataURL('image/jpeg', 0.42));
+      };
+      img.src = dataUrl;
+    }
+
+    /* 用圓形相片覆蓋紅點（打卡後呼叫） */
+    function showStoryMarker(dataUrl) {
+      placePhotoMarker(activeSpot, dataUrl);
+      buildStampList();
+      map.setView([activeSpot.lat, activeSpot.lng], 16);
+    }
+
+    function showCard() { document.getElementById('card').classList.add('visible'); }
+    function dismissCard() { document.getElementById('card').classList.remove('visible'); }
+
+    /* 開關印花 Panel */
+    function toggleStampPanel() {
+      document.getElementById('stamp-panel').classList.toggle('open');
+      document.getElementById('stamp-overlay').classList.toggle('open');
+    }
+
+    /* 向下拉關閉 stamp panel */
+    (function() {
+      const panel = document.getElementById('stamp-panel');
+      let startY = 0, startScroll = 0, dragging = false, dist = 0;
+
+      panel.addEventListener('touchstart', e => {
+        startY = e.touches[0].clientY;
+        startScroll = panel.scrollTop;
+        dragging = false; dist = 0;
+      }, { passive: true });
+
+      panel.addEventListener('touchmove', e => {
+        const dy = e.touches[0].clientY - startY;
+        if (dy > 0 && startScroll === 0) {
+          dragging = true; dist = dy;
+          panel.style.transition = 'none';
+          panel.style.transform = `translateY(${dy}px)`;
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      panel.addEventListener('touchend', () => {
+        if (!dragging) return;
+        panel.style.transition = '';
+        if (dist > 80) {
+          panel.style.transform = '';
+          toggleStampPanel();
+        } else {
+          panel.style.transform = 'translateY(0)';
+        }
+        dragging = false; dist = 0;
+      });
+    })();
+
+    /* 從 panel 撳景點 → 關 panel、切換卡片、飛去位置 */
+    function flyToSpot(id) {
+      const spot = SPOTS.find(s => s.id === id);
+      if (!spot) return;
+      toggleStampPanel();
+      switchSpot(spot);
+      map.flyTo([spot.lat, spot.lng], 16, { duration: 1.2 });
+    }
+
+    /* ── 地圖用戶 Marker ── */
+    function updateUserMarker(lat, lng) {
+      if (userMarker) {
+        userMarker.setLatLng([lat, lng]);
+      } else {
+        userMarker = L.circleMarker([lat, lng], {
+          radius: 8, fillColor: '#4A90D9',
+          color: '#fff', weight: 2.5, fillOpacity: 1
+        }).addTo(map).bindPopup('你的位置');
+      }
+      map.fitBounds(
+        L.latLngBounds([[lat, lng], [TARGET.lat, TARGET.lng]]),
+        { padding: [80, 80] }
+      );
+    }
+
+    /* ── 距離進度條 ── */
+    function updateDistanceBar(distMeters) {
+      document.getElementById('dist-bar-wrap').classList.add('visible');
+      const pct = Math.min(100, (distMeters / 2000) * 100);
+      const fill = document.getElementById('dist-bar-fill');
+      fill.style.width = Math.max(0, 100 - pct) + '%';
+      fill.style.background = distMeters <= TARGET.radiusMeters ? '#2A9D8F' : '#D9383A';
+      const label = document.getElementById('dist-bar-text');
+      label.textContent = distMeters < 1000
+        ? Math.round(distMeters) + ' m'
+        : (distMeters / 1000).toFixed(1) + ' km';
+    }
+
+    /* ── Modal ── */
+    function showSuccessModal(dataUrl) {
+      document.getElementById('modal-spot-name').textContent = activeSpot.name;
+      document.getElementById('modal-date').textContent = formatDate(Date.now());
+      document.getElementById('modal-progress').innerHTML = getPrefProgress(activeSpot.pref);
+
+      document.getElementById('modal-global').innerHTML = getGlobalStatsHtml();
+
+      if (dataUrl) {
+        document.getElementById('modal-photo').src = dataUrl;
+        document.getElementById('modal-photo-wrap').style.display = 'block';
+      }
+      document.getElementById('success-modal').classList.add('show');
+    }
+    function closeModal() {
+      document.getElementById('success-modal').classList.remove('show');
+    }
+
+    /* 🧪 模擬打卡當前景點（跳過 GPS，直接拍照） */
+    function testPhotoDirectly() {
+      toggleFakePanel();
+      fakeGpsEnabled = true;
+      fakeCoords = { lat: activeSpot.lat, lng: activeSpot.lng };
+      startLocating();
+    }
+
+    /* ── 狀態文字 ── */
+    function setStatus(html, type) {
+      const el = document.getElementById('status-msg');
+      el.innerHTML = html;
+      el.className = type || '';
+    }
+
+    restoreCheckins();
+    updateMarkerScale();
+    applyZoomScale();
+  </script>
+</body>
+</html>
